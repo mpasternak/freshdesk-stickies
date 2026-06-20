@@ -149,6 +149,17 @@ let bodyEl = null;
 const bodyRef = (el) => { if (el) bodyEl = el; };
 function startResize(e, dispatch) {
   e.preventDefault();
+  // Korzeń karteczki (rodzic uchwytu). Pozycję (top/left) trzymamy ZABLOKOWANĄ
+  // na czas całego gestu — dzięki temu zmiana wysokości listy NIE przesuwa
+  // karteczki w górę/dół (rośnie tylko dół, lewy-górny róg stoi w miejscu).
+  const root = e.currentTarget ? e.currentTarget.parentElement : null;
+  const lockTop = root ? root.style.top : "";
+  const lockLeft = root ? root.style.left : "";
+  const pin = () => {
+    if (!root) return;
+    if (lockTop) root.style.top = lockTop;
+    if (lockLeft) root.style.left = lockLeft;
+  };
   const startY = e.clientY;
   const startH = bodyEl ? bodyEl.offsetHeight : 0;
   let lastH = startH, moved = false;
@@ -157,10 +168,12 @@ function startResize(e, dispatch) {
     moved = true;
     lastH = Math.max(MIN_BODY, startH + (ev.clientY - startY));
     if (bodyEl) bodyEl.style.maxHeight = lastH + "px";
+    pin(); // utrzymaj pozycję — zmieniamy wyłącznie wysokość
   };
   const up = () => {
     window.removeEventListener("mousemove", move);
     window.removeEventListener("mouseup", up);
+    pin();
     if (moved) setUI(dispatch, { height: lastH }); // czysty klik nie zmienia rozmiaru
   };
   window.addEventListener("mousemove", move);
@@ -189,8 +202,8 @@ const title = {
   flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
 };
 const sub = { fontSize: 11, opacity: 0.7 };
-const ctlWrap = { display: "flex", alignItems: "center", gap: 7, flex: "0 0 auto" };
-const ctl = { cursor: "pointer", opacity: 0.6, fontSize: 13, lineHeight: 1, userSelect: "none" };
+const ctlWrap = { display: "flex", alignItems: "center", gap: 9, flex: "0 0 auto" };
+const ctl = { cursor: "pointer", opacity: 0.6, fontSize: 16, lineHeight: 1, userSelect: "none" };
 const row = {
   display: "block", textDecoration: "none", color: "inherit",
   padding: "2px 0", borderTop: "1px solid rgba(0,0,0,0.07)", whiteSpace: "nowrap",
