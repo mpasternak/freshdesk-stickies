@@ -17,6 +17,7 @@ import base64
 import json
 import os
 import re
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -35,13 +36,12 @@ W_PRIORITY = {4: 30, 3: 20, 2: 10, 1: 0}  # Urgent/High/Medium/Low
 W_AGE_PER_DAY = 1
 W_AGE_CAP = 30
 
-REMIND_DAYS = 5  # pending bez ruchu > tylu dni → 🔔 przypominajka
-CLOSE_DAYS = 10  # pending bez ruchu > tylu dni → 🗑 kandydat do zamknięcia
-
-OLD_DAYS = 14  # od kiedy doklejamy flagę 🕸 "stare"
+OLD_DAYS = 14  # wiek otwartego zgłoszenia → flaga 🕸 "stare"
+CLIENT_SILENCE_DAYS = 14  # oczekujące: cisza klienta > tylu dni → 🐌 "klient Nd"
 
 _CACHE_DIR = Path.home() / ".cache" / "freshdesk"
 _CONTACT_CACHE = _CACHE_DIR / "contacts.json"
+_STATS_CACHE = _CACHE_DIR / "stats.json"
 
 
 # ── Konfiguracja / HTTP ──────────────────────────────────────────────────────
@@ -130,6 +130,42 @@ def _resolve_contacts(ids: set[int]) -> dict:
     return cache
 
 
+# ── Pełny tykiet ze „stats" (cache na dysku po id+updated_at) ────────────────
+
+
+def _load_stats_cache() -> dict:
+    if _STATS_CACHE.exists():
+        try:
+            return json.loads(_STATS_CACHE.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _save_stats_cache(cache: dict) -> None:
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    _STATS_CACHE.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+
+
+def _ticket_with_stats(ticket_id: int, updated_at: str, cache: dict) -> dict | None:
+    """Pełny tykiet z `stats` i ŻYWYM `status`. Cache po (id, updated_at).
+
+    `updated_at` z wyszukiwarki to klucz świeżości — gdy się nie zmienił, cały
+    tykiet (a więc i stats) jest ten sam. Błąd sieci/HTTP zwraca None (zalogowany
+    na stderr); wołający robi bezpieczny fallback zamiast wywalać widget.
+    """
+    hit = cache.get(str(ticket_id))
+    if hit and hit.get("updated_at") == updated_at:
+        return hit.get("ticket")
+    try:
+        full = _get(f"tickets/{ticket_id}", {"include": "stats"})
+    except OSError as e:  # urllib.error.URLError/HTTPError i timeouty to OSError
+        print(f"freshdesk: nie pobrano stats #{ticket_id}: {e}", file=sys.stderr)
+        return None
+    cache[str(ticket_id)] = {"updated_at": updated_at, "ticket": full}
+    return full
+
+
 # ── Scoring ──────────────────────────────────────────────────────────────────
 
 
@@ -193,14 +229,29 @@ def score_open(t: dict, now: datetime) -> tuple[int, list[str]]:
     return score, flags
 
 
-def pending_bucket(t: dict, now: datetime) -> str:
-    """Klasyfikacja pending po wieku od ostatniego ruchu (updated_at)."""
-    age = _age_days(t.get("updated_at"), now)
-    if age > CLOSE_DAYS:
-        return "close"  # 🗑 kandydat do zamknięcia
-    if age > REMIND_DAYS:
-        return "remind"  # 🔔 przypominajka należna
-    return "fresh"  # czeka, świeże
+def last_reply_is_customer(stats: dict) -> bool:
+    """Czy OSTATNIA wiadomość w zgłoszeniu jest od klienta (piłka u mnie).
+
+    Porównujemy znaczniki ze `stats` (include=stats). Brak odpowiedzi klienta
+    (`requester_responded_at` puste) → piłka u klienta (czekam na niego).
+    """
+    a = _parse_dt(stats.get("agent_responded_at"))
+    r = _parse_dt(stats.get("requester_responded_at"))
+    if r is None:
+        return False
+    if a is None:
+        return True
+    return r > a
+
+
+def client_silence_days(stats: dict, t: dict, now: datetime) -> float:
+    """Ile dni klient milczy, odkąd piłka jest po jego stronie.
+
+    Liczone od `pending_since` (moment przejścia w oczekiwanie / moja ostatnia
+    odpowiedź). Fallbacky, gdyby `stats` było niepełne.
+    """
+    since = stats.get("pending_since") or stats.get("agent_responded_at") or t.get("updated_at")
+    return _age_days(since, now)
 
 
 # ── Filtr per projekt/osoba ──────────────────────────────────────────────────
@@ -270,6 +321,37 @@ def build(
             continue
         score, flags = score_open(t, now)
         open_items.append(_row(t, contacts, now, score=score, flags=flags))
+
+    # Oczekujące: dla każdego dociągamy „stats" (kto odpisał ostatni) + żywy status.
+    #  - klient odpisał ostatni (piłka u mnie)      → doklej do otwartych, scoring jak otwarte,
+    #  - ja odpisałem, klient milczy ≤ 14 dni       → ukryte (nic nie wymaga akcji),
+    #  - ja odpisałem, klient milczy > 14 dni       → sekcja oczekujących z 🐌.
+    pending_items = []
+    stats_cache = _load_stats_cache()
+    stats_dirty = False
+    for t in raw_pending:
+        if not keep(t):
+            continue
+        upd = t.get("updated_at") or ""
+        cached = stats_cache.get(str(t["id"]))
+        full = _ticket_with_stats(t["id"], upd, stats_cache)
+        if full is None:
+            full = t  # błąd pobrania → bezpieczny fallback na dane z wyszukiwarki
+        elif not (cached and cached.get("updated_at") == upd):
+            stats_dirty = True  # realne pobranie po ID
+        if full.get("status", t.get("status")) not in (2, 3):
+            continue  # live: już zamknięte / spam / kosz → znika od razu (bez czekania na indeks)
+        stats = full.get("stats") or {}
+        if last_reply_is_customer(stats):
+            score, flags = score_open(full, now)
+            open_items.append(_row(full, contacts, now, score=score, flags=flags, from_pending=True))
+        else:
+            silence = client_silence_days(stats, full, now)
+            if silence > CLIENT_SILENCE_DAYS:
+                pending_items.append(_row(full, contacts, now, silence_days=round(silence, 1)))
+    if stats_dirty:
+        _save_stats_cache(stats_cache)
+
     if recent:
         open_items.sort(key=lambda r: r["created_at"], reverse=True)
     else:
@@ -277,15 +359,8 @@ def build(
     if limit:
         open_items = open_items[:limit]
 
-    pending_items = []
-    for t in raw_pending:
-        if not keep(t):
-            continue
-        bucket = pending_bucket(t, now)
-        pending_items.append(_row(t, contacts, now, bucket=bucket))
-    # najpierw do zamknięcia, potem do przypomnienia, potem świeże; w grupie starsze wyżej
-    order = {"close": 0, "remind": 1, "fresh": 2}
-    pending_items.sort(key=lambda r: (order[r["bucket"]], r["updated_at"]))
+    # najdłużej milczący klient u góry
+    pending_items.sort(key=lambda r: r["silence_days"], reverse=True)
 
     return {
         "project": project or ("pozostałe" if exclude_lists else "wszystko"),
@@ -296,15 +371,13 @@ def build(
             "open": len(open_items),
             "open_sla": sum(1 for r in open_items if "⏰SLA" in r["flags"]),
             "pending": len(pending_items),
-            "remind": sum(1 for r in pending_items if r["bucket"] == "remind"),
-            "close": sum(1 for r in pending_items if r["bucket"] == "close"),
         },
     }
 
 
-def _row(t, contacts, now, *, score=0, flags=None, bucket=None) -> dict:
+def _row(t, contacts, now, *, score=0, flags=None, from_pending=False, silence_days=None) -> dict:
     c = contacts.get(str(t.get("requester_id")), {})
-    ts = t.get("updated_at") if bucket else t.get("created_at")
+    ts = t.get("updated_at") if silence_days is not None else t.get("created_at")
     return {
         "id": t["id"],
         "url": panel_url(t["id"]),
@@ -312,7 +385,8 @@ def _row(t, contacts, now, *, score=0, flags=None, bucket=None) -> dict:
         "priority": t.get("priority", 1),
         "score": score,
         "flags": flags or [],
-        "bucket": bucket,
+        "from_pending": from_pending,  # „klient odpisał" doklejone do otwartych
+        "silence_days": silence_days,  # tylko oczekujące >14 dni (🐌 klient Nd)
         "requester": c.get("name") or c.get("email") or "",
         "age_days": round(_age_days(ts, now), 1),
         "created_at": t.get("created_at") or "",

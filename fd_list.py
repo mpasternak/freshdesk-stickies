@@ -23,18 +23,18 @@ def _text(data: dict) -> str:
     c = data["counts"]
     lines = [
         f"Freshdesk — [{data['project']}]   {data['generated_at']}",
-        f"🔴 {c['open']} open ({c['open_sla']} po SLA) · "
-        f"🟡 {c['pending']} pending ({c['remind']} przypomnij, {c['close']} zamknij)",
+        f"🔴 {c['open']} open ({c['open_sla']} po SLA) · 🐌 {c['pending']} klient milczy",
         "",
     ]
     for i, r in enumerate(data["open"], 1):
         flags = " ".join(r["flags"])
-        lines.append(f"{i:2}. #{r['id']:<4} {flags:14} {_truncate(r['subject'])}  ·{r['age_days']:.0f}d")
+        mark = "💬 " if r.get("from_pending") else ""
+        lines.append(f"{i:2}. #{r['id']:<4} {flags:14} {mark}{_truncate(r['subject'])}  ·{r['age_days']:.0f}d")
     if data["pending"]:
         lines.append("")
-        icon = {"close": "🗑", "remind": "🔔", "fresh": "·"}
         for r in data["pending"]:
-            lines.append(f"  {icon[r['bucket']]} #{r['id']} {_truncate(r['subject'])}  ·{r['age_days']:.0f}d")
+            d = r.get("silence_days") or 0
+            lines.append(f"  🐌 #{r['id']} {_truncate(r['subject'])}  · klient {d:.0f}d")
     return "\n".join(lines)
 
 

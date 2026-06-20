@@ -76,10 +76,31 @@ def test_age_is_capped():
     assert "🕸" in flags
 
 
-def test_pending_buckets():
-    def t(days):
-        return {"updated_at": _iso(NOW - timedelta(days=days))}
+def test_last_reply_is_customer():
+    a = _iso(NOW - timedelta(days=3))  # ja odpisałem 3 dni temu
+    r = _iso(NOW - timedelta(days=1))  # klient odpisał 1 dzień temu (nowszy)
+    # klient odpisał po mnie → piłka u mnie
+    assert fd.last_reply_is_customer({"agent_responded_at": a, "requester_responded_at": r})
+    # ja odpisałem po kliencie → piłka u klienta
+    assert not fd.last_reply_is_customer({"agent_responded_at": r, "requester_responded_at": a})
+    # klient nigdy nie odpisał → piłka u klienta
+    assert not fd.last_reply_is_customer({"agent_responded_at": a, "requester_responded_at": None})
+    # tylko klient odpisał (brak odpowiedzi agenta) → piłka u mnie
+    assert fd.last_reply_is_customer({"agent_responded_at": None, "requester_responded_at": r})
+    # brak jakichkolwiek danych → piłka u klienta (czekam na niego)
+    assert not fd.last_reply_is_customer({})
 
-    assert fd.pending_bucket(t(2), NOW) == "fresh"
-    assert fd.pending_bucket(t(7), NOW) == "remind"
-    assert fd.pending_bucket(t(20), NOW) == "close"
+
+def test_client_silence_days_from_pending_since():
+    stats = {"pending_since": _iso(NOW - timedelta(days=21)), "agent_responded_at": _iso(NOW)}
+    # liczone od pending_since, nie od agent_responded_at
+    assert round(fd.client_silence_days(stats, {}, NOW)) == 21
+
+
+def test_client_silence_days_fallbacks():
+    # brak pending_since → agent_responded_at
+    s1 = {"agent_responded_at": _iso(NOW - timedelta(days=5))}
+    assert round(fd.client_silence_days(s1, {}, NOW)) == 5
+    # brak stats → updated_at zgłoszenia
+    t = {"updated_at": _iso(NOW - timedelta(days=9))}
+    assert round(fd.client_silence_days({}, t, NOW)) == 9

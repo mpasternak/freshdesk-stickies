@@ -244,7 +244,7 @@ export const render = (state, dispatch) => {
   );
 
   const countsLine = c
-    ? <span>🔴 {c.open} open ({c.open_sla} po SLA) · 🟡 {c.pending} pending</span>
+    ? <span>🔴 {c.open} open ({c.open_sla} po SLA) · 🐌 {c.pending} klient</span>
     : <span>{error ? "⚠️ błąd" : "—"}</span>;
 
   // Zwinięta: tylko pasek nagłówka (tytuł + liczniki + przyciski).
@@ -283,14 +283,15 @@ export const render = (state, dispatch) => {
         )}
         {!error && d && d.open && d.open.map((r) => (
           <a style={row} href={r.url} title={r.subject} key={r.id}>
-            <span style={idc}>#{r.id}</span>{r.flags.join("")} {trunc(r.subject)}
+            <span style={idc}>#{r.id}</span>{r.from_pending ? "💬 " : ""}{r.flags.join("")} {trunc(r.subject)}
           </a>
         ))}
-        {!error && d && d.pending && d.pending.filter((r) => r.bucket !== "fresh").length > 0 && (
+        {!error && d && d.pending && d.pending.length > 0 && (
           <div style={pend}>
-            {d.pending.filter((r) => r.bucket !== "fresh").map((r) => (
+            {d.pending.map((r) => (
               <a style={row} href={r.url} title={r.subject} key={r.id}>
-                <span style={idc}>{r.bucket === "close" ? "🗑" : "🔔"} #{r.id}</span>{trunc(r.subject)}
+                <span style={idc}>🐌 #{r.id}</span>{trunc(r.subject, 30)}{" "}
+                <span style={{ opacity: 0.55 }}>klient {Math.round(r.silence_days || 0)}d</span>
               </a>
             ))}
           </div>
