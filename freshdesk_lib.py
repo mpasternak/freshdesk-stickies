@@ -229,6 +229,18 @@ def score_open(t: dict, now: datetime) -> tuple[int, list[str]]:
     return score, flags
 
 
+def urgency_tier(flags: list[str]) -> int:
+    """Sekcja pilności do podziału listy otwartych (0 = najpilniejsza).
+
+    0 = po SLA (⏰SLA), 1 = nadchodzący termin <48h (⌛…), 2 = pozostałe.
+    """
+    if "⏰SLA" in flags:
+        return 0
+    if any(f.startswith("⌛") for f in flags):
+        return 1
+    return 2
+
+
 def last_reply_is_customer(stats: dict) -> bool:
     """Czy OSTATNIA wiadomość w zgłoszeniu jest od klienta (piłka u mnie).
 
@@ -355,7 +367,8 @@ def build(
     if recent:
         open_items.sort(key=lambda r: r["created_at"], reverse=True)
     else:
-        open_items.sort(key=lambda r: (-r["score"], r["created_at"]))
+        # podział na sekcje pilności (tier), w sekcji od najwyższego numeru
+        open_items.sort(key=lambda r: (r["tier"], -r["id"]))
     if limit:
         open_items = open_items[:limit]
 
@@ -365,6 +378,7 @@ def build(
     return {
         "project": project or ("pozostałe" if exclude_lists else "wszystko"),
         "generated_at": now.isoformat(timespec="seconds"),
+        "grouped": not recent,  # otwarte w sekcjach pilności (recent = płaska lista wg daty)
         "open": open_items,
         "pending": pending_items,
         "counts": {
@@ -387,6 +401,7 @@ def _row(t, contacts, now, *, score=0, flags=None, from_pending=False, silence_d
         "flags": flags or [],
         "from_pending": from_pending,  # „klient odpisał" doklejone do otwartych
         "silence_days": silence_days,  # tylko oczekujące >14 dni (🐌 klient Nd)
+        "tier": None if silence_days is not None else urgency_tier(flags or []),
         "requester": c.get("name") or c.get("email") or "",
         "age_days": round(_age_days(ts, now), 1),
         "created_at": t.get("created_at") or "",

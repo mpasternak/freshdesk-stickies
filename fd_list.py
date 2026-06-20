@@ -29,10 +29,16 @@ def _text(data: dict) -> str:
         head,
         "",
     ]
-    for i, r in enumerate(data["open"], 1):
+    tier_labels = {0: "⏰ Po SLA", 1: "⌛ Termin <48h", 2: "Pozostałe"}
+    grouped = data.get("grouped")
+    last_tier = object()
+    for r in data["open"]:
+        if grouped and r.get("tier") != last_tier:
+            last_tier = r.get("tier")
+            lines.append(f"— {tier_labels.get(last_tier, '—')} —")
         flags = " ".join(r["flags"])
         mark = "💬 " if r.get("from_pending") else ""
-        lines.append(f"{i:2}. #{r['id']:<4} {flags:14} {mark}{_truncate(r['subject'])}  ·{r['age_days']:.0f}d")
+        lines.append(f"  #{r['id']:<4} {flags:14} {mark}{_truncate(r['subject'])}  ·{r['age_days']:.0f}d")
     if data["pending"]:
         lines.append("")
         for r in data["pending"]:

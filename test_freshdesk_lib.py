@@ -76,6 +76,14 @@ def test_age_is_capped():
     assert "🕸" in flags
 
 
+def test_urgency_tier():
+    assert fd.urgency_tier(["⏰SLA", "🔴Urgent"]) == 0  # po SLA bije wszystko
+    assert fd.urgency_tier(["⌛<24h", "🟠High"]) == 1  # nadchodzący termin
+    assert fd.urgency_tier(["⌛<48h"]) == 1
+    assert fd.urgency_tier(["🟡Medium", "🕸"]) == 2  # tylko priorytet/wiek
+    assert fd.urgency_tier([]) == 2
+
+
 def test_last_reply_is_customer():
     a = _iso(NOW - timedelta(days=3))  # ja odpisałem 3 dni temu
     r = _iso(NOW - timedelta(days=1))  # klient odpisał 1 dzień temu (nowszy)

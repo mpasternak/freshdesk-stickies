@@ -211,9 +211,36 @@ const row = {
 };
 const idc = { fontVariantNumeric: "tabular-nums", opacity: 0.55, marginRight: 6 };
 const pend = { marginTop: 8, paddingTop: 6, borderTop: "1px dashed rgba(0,0,0,0.25)", fontSize: 11 };
+const grpHdr = { fontSize: 10, fontWeight: 700, opacity: 0.5, letterSpacing: 0.4, margin: "8px 0 1px" };
 const handle = { height: 7, marginTop: 6, borderRadius: 5, cursor: "ns-resize", background: "rgba(0,0,0,0.10)" };
 
 const trunc = (s, n = 42) => (s.length <= n ? s : s.slice(0, n - 1) + "…");
+
+const TIER_LABELS = ["⏰ Po SLA", "⌛ Termin <48h", "Pozostałe"];
+
+function openRow(r) {
+  return (
+    <a style={row} href={r.url} title={r.subject} key={r.id}>
+      <span style={idc}>#{r.id}</span>{r.from_pending ? "💬 " : ""}{r.flags.join("")} {trunc(r.subject)}
+    </a>
+  );
+}
+
+// Otwarte: w sekcjach pilności (gdy grouped) z nagłówkiem przy zmianie tier,
+// albo płasko (tryb „ostatnio" sortuje po dacie, bez sekcji).
+function renderOpen(rows, grouped) {
+  if (!grouped) return rows.map(openRow);
+  const out = [];
+  let last = null;
+  rows.forEach((r) => {
+    if (r.tier !== last) {
+      last = r.tier;
+      out.push(<div style={grpHdr} key={"h" + r.tier}>{TIER_LABELS[r.tier] || "—"}</div>);
+    }
+    out.push(openRow(r));
+  });
+  return out;
+}
 
 // --- render -----------------------------------------------------------------
 export const render = (state, dispatch) => {
@@ -281,11 +308,7 @@ export const render = (state, dispatch) => {
         {!error && d && d.open && d.open.length === 0 && (
           <div style={sub}>brak otwartych 🎉</div>
         )}
-        {!error && d && d.open && d.open.map((r) => (
-          <a style={row} href={r.url} title={r.subject} key={r.id}>
-            <span style={idc}>#{r.id}</span>{r.from_pending ? "💬 " : ""}{r.flags.join("")} {trunc(r.subject)}
-          </a>
-        ))}
+        {!error && d && d.open && renderOpen(d.open, d.grouped)}
         {!error && d && d.pending && d.pending.length > 0 && (
           <div style={pend}>
             {d.pending.map((r) => (
