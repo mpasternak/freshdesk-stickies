@@ -123,15 +123,61 @@ name/email (case-insensitive).
    scrolls inside); **double-click** that edge to go back to auto-height. Collapse,
    hide and height are all remembered per note in localStorage, just like position.
 
-   If you change `make_widget.py` (the template), regenerate every note at once
-   with `./regen.sh` (it records each note's name, position and accent), then
-   re-run `./install-widgets.sh`.
+   To regenerate every note at once after a template change, see
+   [Regenerating and installing](#regenerating-and-installing) below.
 
 5. **Install the widgets** into Übersicht:
    ```sh
    ./install-widgets.sh
    ```
    (or copy `widgets/*.jsx` into Übersicht's widgets folder, then ⌘R to refresh).
+
+## Regenerating and installing
+
+Notes flow through three stages — **source → generated files → live Übersicht**:
+
+```
+make_widget.py        ./regen.sh         widgets/*.jsx       ./install-widgets.sh    Übersicht
+(template, in repo) ─────────────────► (generated,      ──────────────────────► ~/Library/.../widgets/
+                     stamps out 6        git-ignored)         copies the files    (what shows on screen)
+                     .jsx files
+```
+
+`make_widget.py` is the single source of truth (the template). The generated
+`widgets/*.jsx` are **git-ignored** — they contain machine-specific absolute
+paths, so everyone generates their own.
+
+### `regen.sh` — build the notes from the template
+
+Runs `make_widget.py` once per note with each note's remembered arguments
+(name, position, accent, filter), overwriting `widgets/freshdesk-*.jsx` from the
+**current** template. It does **not** touch Übersicht — it only produces files in
+the repo. It doubles as the list of your notes; add a line to add a note. The
+`--top/--left` values are only **starting** positions: once you've dragged a note,
+the position saved in localStorage wins, so regenerating never moves notes you've
+already placed.
+
+### `install-widgets.sh` — copy them into Übersicht
+
+Copies `widgets/freshdesk-*.jsx` into Übersicht's widgets folder
+(`~/Library/Application Support/Übersicht/widgets`). If that folder doesn't exist
+(Übersicht not installed/launched), it stops with a message. After copying, press
+**⌘R** in Übersicht to reload.
+
+Generation and deployment are kept separate on purpose: you can regenerate and
+review the files in the repo before anything reaches your live desktop.
+
+### When to run what
+
+- Changed the **template** (`make_widget.py`) or the args in `regen.sh`:
+  `./regen.sh && ./install-widgets.sh`, then **⌘R**.
+- Adding a **new** note: add a line to `regen.sh` (or run `make_widget.py "Name"
+  --top … --left …` once), then `./install-widgets.sh` + **⌘R**.
+- Changed only the ticket-fetching logic (`freshdesk_lib.py` / `fd_list.py`): no
+  regeneration needed — just **⌘R** (or the note's **⟳** button), since the widget
+  calls those scripts live.
+
+Mnemonic: **`regen` = build the files, `install` = put them in Übersicht, ⌘R = show them.**
 
 ## Notes & limits
 
