@@ -26,20 +26,57 @@ export const refreshFrequency = 300000; // 5 min
 export const command =
   `cd __PROJECT_DIR__ && __PYTHON__ fd_list.py "__PROJECT__" --json`;
 
-export const className = `
-  top: __TOP__px;
-  left: __LEFT__px;
-  width: 360px;
-  pointer-events: auto;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #2b2b2b;
-  background: #fff8c4;
-  border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.28);
-  padding: 12px 14px;
-  font-size: 12px;
-  line-height: 1.45;
-`;
+// Wrapper trzymamy w 0,0 — realną pozycję i wygląd ustawiamy na korzeniu
+// (position: fixed), dzięki czemu karteczkę można przeciągać myszą.
+export const className = `top: 0; left: 0;`;
+
+const STORAGE_KEY = "fdpos-__SLUG__";
+const DEFAULT_POS = { x: __LEFT__, y: __TOP__ };
+
+const rootStyle = {
+  position: "fixed",
+  width: "360px",
+  pointerEvents: "auto",
+  cursor: "grab",
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  color: "#2b2b2b",
+  background: "#fff8c4",
+  borderRadius: "10px",
+  boxShadow: "0 6px 20px rgba(0,0,0,0.28)",
+  padding: "12px 14px",
+  fontSize: "12px",
+  lineHeight: 1.45,
+};
+
+// Przeciąganie + zapamiętywanie pozycji w localStorage (klucz per projekt).
+function initDrag(el) {
+  if (!el || el.__fdInit) return;
+  el.__fdInit = true;
+  let pos;
+  try { pos = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) { pos = null; }
+  if (!pos) pos = { ...DEFAULT_POS };
+  const apply = () => { el.style.left = pos.x + "px"; el.style.top = pos.y + "px"; };
+  apply();
+  let drag = false, sx = 0, sy = 0, ox = 0, oy = 0;
+  el.addEventListener("mousedown", (e) => {
+    if (e.target.closest("a")) return; // klik w link działa normalnie
+    drag = true; sx = e.clientX; sy = e.clientY; ox = pos.x; oy = pos.y;
+    el.style.cursor = "grabbing";
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!drag) return;
+    pos.x = ox + (e.clientX - sx);
+    pos.y = oy + (e.clientY - sy);
+    apply();
+  });
+  window.addEventListener("mouseup", () => {
+    if (!drag) return;
+    drag = false;
+    el.style.cursor = "grab";
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(pos));
+  });
+}
 
 const hdr = { borderLeft: "4px solid __ACCENT__", paddingLeft: 8, marginBottom: 8 };
 const title = { fontWeight: 700, fontSize: 14, letterSpacing: 0.3 };
@@ -55,20 +92,23 @@ const pend = { marginTop: 8, paddingTop: 6, borderTop: "1px dashed rgba(0,0,0,0.
 const trunc = (s, n = 42) => (s.length <= n ? s : s.slice(0, n - 1) + "…");
 
 export const render = ({ output, error }) => {
-  if (error) return <div style={hdr}>⚠️ błąd: {String(error)}</div>;
+  if (error)
+    return <div style={rootStyle} ref={initDrag}>⚠️ błąd: {String(error)}</div>;
   let d;
   try { d = JSON.parse(output); }
   catch (e) {
     return (
-      <div style={hdr}>
-        <div style={title}>__PROJECT__</div>
-        <div style={sub}>Brak danych — sprawdź klucz API (~/.config/freshdesk/key).</div>
+      <div style={rootStyle} ref={initDrag}>
+        <div style={hdr}>
+          <div style={title}>__PROJECT__</div>
+          <div style={sub}>Brak danych — sprawdź klucz API (~/.config/freshdesk/key).</div>
+        </div>
       </div>
     );
   }
   const c = d.counts;
   return (
-    <div>
+    <div style={rootStyle} ref={initDrag}>
       <div style={hdr}>
         <div style={title}>__PROJECT__</div>
         <div style={sub}>
@@ -116,6 +156,7 @@ def main() -> None:
     content = (
         TEMPLATE.replace("__PROJECT_DIR__", PROJECT_DIR)
         .replace("__PYTHON__", PYTHON)
+        .replace("__SLUG__", slug(a.project))
         .replace("__PROJECT__", a.project)
         .replace("__TOP__", str(a.top))
         .replace("__LEFT__", str(a.left))
