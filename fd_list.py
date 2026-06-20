@@ -2,9 +2,9 @@
 """CLI dla widgetu Übersicht i do testów w terminalu.
 
 Użycie:
-    python3 fd_list.py "ATOM-APOZ"          # ładny wydruk tekstowy (test)
-    python3 fd_list.py "ATOM-APOZ" --json   # JSON dla widgetu Übersicht
-    python3 fd_list.py                       # bez filtra = wszystko
+    python3 fd_list.py "Webapp"          # ładny wydruk tekstowy (test)
+    python3 fd_list.py "Webapp" --json   # JSON dla widgetu Übersicht
+    python3 fd_list.py                   # bez filtra = wszystko
 """
 
 import json

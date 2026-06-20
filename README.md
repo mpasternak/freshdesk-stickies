@@ -10,6 +10,9 @@ The point: instead of staring at a flat ticket list where everything is
 deadline soon → priority field → age) so the thing that actually needs you floats
 to the top.
 
+<!-- Add a real screenshot of your notes here once installed: -->
+![freshdesk-stickies on the desktop](docs/screenshot.png)
+
 ```
 ┌─ Webapp ───────────┐  ┌─ BILLING-ACME ─────┐
 │ ⏰ #354 timeouts…  │  │ ⏰🔴 #372 invoice   │

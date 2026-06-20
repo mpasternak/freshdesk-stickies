@@ -2,8 +2,8 @@
 """Generator samodzielnych widgetów Übersicht (jeden plik = jedna karteczka).
 
 Użycie:
-    python3 make_widget.py "BPP"            --top 40  --left 40
-    python3 make_widget.py "ATOM-APOZ"      --top 40  --left 430 --accent "#e07a3f"
+    python3 make_widget.py "Webapp"           --top 40  --left 40
+    python3 make_widget.py "BILLING-ACME"     --top 40  --left 430 --accent "#e07a3f"
 
 Powstaje plik widgets/freshdesk-<slug>.jsx. Skopiuj go (albo cały katalog
 widgets/) do katalogu widgetów Übersicht — patrz README.
@@ -114,8 +114,7 @@ def main() -> None:
     a = ap.parse_args()
 
     content = (
-        TEMPLATE
-        .replace("__PROJECT_DIR__", PROJECT_DIR)
+        TEMPLATE.replace("__PROJECT_DIR__", PROJECT_DIR)
         .replace("__PYTHON__", PYTHON)
         .replace("__PROJECT__", a.project)
         .replace("__TOP__", str(a.top))

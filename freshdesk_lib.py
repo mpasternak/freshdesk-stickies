@@ -27,24 +27,25 @@ _CONFIG_DIR = Path.home() / ".config" / "freshdesk"
 
 # Progi i wagi — odpowiadają opisowi w SKILL.md. Łatwe do strojenia w jednym
 # miejscu (np. podbij URGENT, jeśli Urgent ma zawsze bić wiek).
-W_FR_BREACH = 100      # SLA pierwszej odpowiedzi po terminie
-W_DUE_BREACH = 80      # SLA rozwiązania po terminie
-W_DUE_24H = 40         # dowolny termin w ciągu 24 h
-W_DUE_48H = 20         # dowolny termin w ciągu 48 h
-W_PRIORITY = {4: 30, 3: 20, 2: 10, 1: 0}   # Urgent/High/Medium/Low
+W_FR_BREACH = 100  # SLA pierwszej odpowiedzi po terminie
+W_DUE_BREACH = 80  # SLA rozwiązania po terminie
+W_DUE_24H = 40  # dowolny termin w ciągu 24 h
+W_DUE_48H = 20  # dowolny termin w ciągu 48 h
+W_PRIORITY = {4: 30, 3: 20, 2: 10, 1: 0}  # Urgent/High/Medium/Low
 W_AGE_PER_DAY = 1
 W_AGE_CAP = 30
 
-REMIND_DAYS = 5        # pending bez ruchu > tylu dni → 🔔 przypominajka
-CLOSE_DAYS = 10        # pending bez ruchu > tylu dni → 🗑 kandydat do zamknięcia
+REMIND_DAYS = 5  # pending bez ruchu > tylu dni → 🔔 przypominajka
+CLOSE_DAYS = 10  # pending bez ruchu > tylu dni → 🗑 kandydat do zamknięcia
 
-OLD_DAYS = 14          # od kiedy doklejamy flagę 🕸 "stare"
+OLD_DAYS = 14  # od kiedy doklejamy flagę 🕸 "stare"
 
 _CACHE_DIR = Path.home() / ".cache" / "freshdesk"
 _CONTACT_CACHE = _CACHE_DIR / "contacts.json"
 
 
 # ── Konfiguracja / HTTP ──────────────────────────────────────────────────────
+
 
 def _from_env_or_file(env: str, filename: str, human: str) -> str:
     val = os.environ.get(env)
@@ -53,21 +54,15 @@ def _from_env_or_file(env: str, filename: str, human: str) -> str:
     path = _CONFIG_DIR / filename
     if path.exists():
         return path.read_text(encoding="utf-8").strip()
-    raise SystemExit(
-        f"Brak: {human}. Ustaw {env} albo wpisz do {path}."
-    )
+    raise SystemExit(f"Brak: {human}. Ustaw {env} albo wpisz do {path}.")
 
 
 def _api_key() -> str:
-    return _from_env_or_file(
-        "FRESHDESK_API_KEY", "key", "klucz API (Freshdesk → profil → Your API Key)"
-    )
+    return _from_env_or_file("FRESHDESK_API_KEY", "key", "klucz API (Freshdesk → profil → Your API Key)")
 
 
 def _domain() -> str:
-    return _from_env_or_file(
-        "FRESHDESK_DOMAIN", "domain", "domena (np. twojekonto.freshdesk.com)"
-    )
+    return _from_env_or_file("FRESHDESK_DOMAIN", "domain", "domena (np. twojekonto.freshdesk.com)")
 
 
 def panel_url(ticket_id: int) -> str:
@@ -86,6 +81,7 @@ def _get(path: str, params: dict | None = None) -> dict | list:
 
 # ── Pobranie zgłoszeń ────────────────────────────────────────────────────────
 
+
 def _search_all(status: int) -> list[dict]:
     """Wszystkie zgłoszenia o danym statusie — stronicowane (search: do 10 stron)."""
     out: list[dict] = []
@@ -94,12 +90,13 @@ def _search_all(status: int) -> list[dict]:
         data = _get("search/tickets", {"query": f'"status:{status}"', "page": page})
         results = data.get("results", []) if isinstance(data, dict) else []
         out.extend(results)
-        if len(results) < 30:        # ostatnia strona
+        if len(results) < 30:  # ostatnia strona
             break
     return out
 
 
 # ── Rozwijanie kontaktów (z cache na dysku) ──────────────────────────────────
+
 
 def _load_contact_cache() -> dict:
     if _CONTACT_CACHE.exists():
@@ -126,7 +123,7 @@ def _resolve_contacts(ids: set[int]) -> dict:
             c = _get(f"contacts/{cid}")
             cache[str(cid)] = {"name": c.get("name") or "", "email": c.get("email") or ""}
         except urllib.error.HTTPError:
-            cache[str(cid)] = {"name": "", "email": ""}   # usunięty / agent
+            cache[str(cid)] = {"name": "", "email": ""}  # usunięty / agent
         dirty = True
     if dirty:
         _save_contact_cache(cache)
@@ -134,6 +131,7 @@ def _resolve_contacts(ids: set[int]) -> dict:
 
 
 # ── Scoring ──────────────────────────────────────────────────────────────────
+
 
 def _parse_dt(s: str | None) -> datetime | None:
     if not s:
@@ -199,13 +197,14 @@ def pending_bucket(t: dict, now: datetime) -> str:
     """Klasyfikacja pending po wieku od ostatniego ruchu (updated_at)."""
     age = _age_days(t.get("updated_at"), now)
     if age > CLOSE_DAYS:
-        return "close"      # 🗑 kandydat do zamknięcia
+        return "close"  # 🗑 kandydat do zamknięcia
     if age > REMIND_DAYS:
-        return "remind"     # 🔔 przypominajka należna
-    return "fresh"          # czeka, świeże
+        return "remind"  # 🔔 przypominajka należna
+    return "fresh"  # czeka, świeże
 
 
 # ── Filtr per projekt/osoba ──────────────────────────────────────────────────
+
 
 def _haystack(t: dict, contacts: dict) -> str:
     c = contacts.get(str(t.get("requester_id")), {})
@@ -232,6 +231,7 @@ def _tokens(project: str | None) -> list[str]:
 
 
 # ── Publiczne API ────────────────────────────────────────────────────────────
+
 
 def build(project: str | None) -> dict:
     """Zbuduj listę dla projektu/osoby (albo całość, gdy project=None)."""
