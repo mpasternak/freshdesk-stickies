@@ -342,17 +342,28 @@ def slug(project: str) -> str:
 
 
 def build_command(a) -> str:
-    """Złóż komendę fd_list dla widgetu z opcji generatora."""
+    """Złóż komendę fd_list dla widgetu z opcji generatora.
+
+    Filtr włączający i wykluczający można łączyć: np. --query "ATOM|APOZ"
+    z --exclude "BPP" daje „(atom lub apoz) i nie bpp". Karteczka „pozostałe"
+    (sam --exclude, bez --query) nie dostaje filtra włączającego — z label NIE
+    robimy wtedy zapytania.
+    """
     fd_args: list[str] = []
     if a.recent:
         fd_args.append("--recent")
-    elif a.exclude:
-        fd_args.append("--exclude")
-        fd_args += [f'"{e}"' for e in a.exclude]
     else:
-        query = a.query if a.query is not None else a.label
+        if a.query is not None:
+            query = a.query
+        elif a.exclude:
+            query = None  # karteczka „pozostałe" — działa sam filtr wykluczający
+        else:
+            query = a.label
         if query:
             fd_args.append(f'"{query}"')
+        if a.exclude:
+            fd_args.append("--exclude")
+            fd_args += [f'"{e}"' for e in a.exclude]
     if a.limit is not None:
         fd_args += ["--limit", str(a.limit)]
     fd_args.append("--json")

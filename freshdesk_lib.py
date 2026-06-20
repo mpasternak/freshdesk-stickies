@@ -308,6 +308,20 @@ def _tokens(project: str | None) -> list[str]:
     return [tok.lower() for tok in re.split(r"[^0-9a-zA-ZąćęłńóśżźĄĆĘŁŃÓŚŻŹ]+", project) if tok]
 
 
+def _or_groups(project: str | None) -> list[list[str]]:
+    """Filtr włączający rozbity na grupy OR.
+
+    Grupy rozdzielamy znakiem '|' (alternatywa), a tokeny w grupie łączymy AND:
+    - 'ATOM|APOZ'    → [['atom'], ['apoz']]   (atom LUB apoz),
+    - 'BILLING ACME' → [['billing', 'acme']]  (billing I acme),
+    - 'BPP'          → [['bpp']],
+    - None / ''      → []  (brak filtra włączającego → przechodzi wszystko).
+    """
+    if not project:
+        return []
+    return [toks for toks in (_tokens(g) for g in project.split("|")) if toks]
+
+
 # ── Publiczne API ────────────────────────────────────────────────────────────
 
 
@@ -319,7 +333,9 @@ def build(
 ) -> dict:
     """Zbuduj listę zgłoszeń dla karteczki.
 
-    - project: filtr włączający (tokeny AND po temacie+URL+zgłaszającym). None = wszystko.
+    - project: filtr włączający po temacie+URL+zgłaszającym. Tokeny rozdzielone
+      spacją łączą się przez AND, a '|' to alternatywa (OR): 'ATOM|APOZ' =
+      atom LUB apoz, 'BILLING ACME' = billing I acme. None = wszystko.
     - exclude: lista filtrów wyłączających — zgłoszenie odpada, gdy pasuje do
       KTÓREGOKOLWIEK z nich. Tak robimy karteczkę „pozostałe" (NIE pasujące do
       żadnego z wymienionych projektów).
@@ -328,7 +344,7 @@ def build(
     - limit: przytnij listę otwartych do N pozycji.
     """
     now = datetime.now(timezone.utc)
-    tokens = _tokens(project)
+    include_groups = _or_groups(project)
     exclude_lists = [toks for toks in (_tokens(e) for e in (exclude or [])) if toks]
 
     raw_open = _search_all(2)
@@ -338,8 +354,10 @@ def build(
     contacts = _resolve_contacts(req_ids)
 
     def keep(t: dict) -> bool:
-        if not _matches(t, tokens, contacts):
+        # filtr włączający: zgłoszenie musi pasować do CO NAJMNIEJ JEDNEJ grupy OR
+        if include_groups and not any(_matches(t, toks, contacts) for toks in include_groups):
             return False
+        # filtr wykluczający: odpada, gdy pasuje do KTÓREGOKOLWIEK z wykluczeń
         return not any(_matches(t, toks, contacts) for toks in exclude_lists)
 
     open_items = []

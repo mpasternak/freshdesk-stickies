@@ -18,6 +18,26 @@ def test_tokens_splits_on_separators():
     assert fd._tokens("") == []
 
 
+def test_or_groups_splits_alternatives_and_ands_within():
+    # '|' rozdziela grupy (OR), spacja/myślnik łączy tokeny w grupie (AND)
+    assert fd._or_groups("ATOM|APOZ") == [["atom"], ["apoz"]]
+    assert fd._or_groups("BILLING ACME") == [["billing", "acme"]]
+    assert fd._or_groups("BPP") == [["bpp"]]
+    assert fd._or_groups(None) == []
+    assert fd._or_groups("") == []
+
+
+def test_or_include_matches_any_group():
+    contacts = {"7": {"name": "Jan", "email": "jan@apoz.edu.pl"}}
+    # zgłoszenie tylko z 'apoz' (w mailu), bez 'atom' w temacie
+    apoz_only = {"subject": "Zmiana hasła", "requester_id": 7, "custom_fields": {}}
+    groups = fd._or_groups("ATOM|APOZ")
+    # OR: pasuje do grupy [apoz], mimo że nie ma 'atom'
+    assert any(fd._matches(apoz_only, g, contacts) for g in groups)
+    # a stary AND (jedna grupa atom+apoz) by tego NIE złapał
+    assert not fd._matches(apoz_only, ["atom", "apoz"], contacts)
+
+
 def test_matches_requires_all_tokens_across_haystack():
     contacts = {"7": {"name": "Jan", "email": "jan@acme.example.com"}}
     ticket = {"subject": "[ATOM] symulacja", "requester_id": 7, "custom_fields": {}}
