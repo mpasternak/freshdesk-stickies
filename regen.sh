@@ -10,10 +10,16 @@ set -euo pipefail
 cd "$(dirname "$0")"
 PY="${PYTHON:-python3}"
 
-"$PY" make_widget.py "BPP"       --top 40  --left 40
-"$PY" make_widget.py "ATOM-APOZ" --query "ATOM|APOZ" --exclude "BPP" --top 40 --left 430 --accent "#e07a3f"
+# Zbiór „BPP" zdefiniowany RAZ — to samo trafia do karteczki BPP (filtr włączający)
+# i do wykluczenia w „Pozostałe". '|' = alternatywa (OR), spacja = AND w grupie.
+# Domeny dopasowujemy w całości (kropka zostaje w tokenie). up.edu.pl ≡ up.lublin.pl
+# (ta sama uczelnia). 'umlub' łapie umlub.pl oraz umlub.edu.pl.
+BPP_FILTER='BPP|Anna Czapczyńska|Anna Starek|Anna Wołodko|umlub|up.edu.pl|up.lublin.pl'
+
+"$PY" make_widget.py "BPP"       --query "$BPP_FILTER" --top 40 --left 40
+"$PY" make_widget.py "ATOM-APOZ" --query "ATOM|APOZ" --exclude "$BPP_FILTER" --top 40 --left 430 --accent "#e07a3f"
 "$PY" make_widget.py "APOZ"      --top 40  --left 820
-"$PY" make_widget.py "Pozostałe" --top 360 --left 40  --accent "#777" --exclude "BPP" "ATOM-APOZ"
+"$PY" make_widget.py "Pozostałe" --top 360 --left 40  --accent "#777" --exclude "$BPP_FILTER" "ATOM|APOZ"
 "$PY" make_widget.py "Ostatnio"  --top 360 --left 430 --recent --accent "#2e9e5b"
 "$PY" make_widget.py "WSB"       --top 360 --left 820
 

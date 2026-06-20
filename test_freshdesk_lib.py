@@ -18,6 +18,30 @@ def test_tokens_splits_on_separators():
     assert fd._tokens("") == []
 
 
+def test_tokens_keeps_dotted_domains_whole():
+    # domena zostaje jednym tokenem (substring), nie rozpada się na 'up'+'lublin'+'pl'
+    assert fd._tokens("up.lublin.pl") == ["up.lublin.pl"]
+    assert fd._tokens("up.edu.pl") == ["up.edu.pl"]
+    assert fd._tokens("umlub") == ["umlub"]
+    # spacja/myślnik nadal dzielą; kropki wiodące/końcowe obcinane
+    assert fd._tokens("Anna Czapczyńska") == ["anna", "czapczyńska"]
+    assert fd._tokens(".pl.") == ["pl"]
+
+
+def test_dotted_domain_is_precise_substring():
+    contacts = {
+        "1": {"name": "Iwona", "email": "iwona@up.lublin.pl"},
+        "2": {"name": "Aleksandra", "email": "ola@up.edu.pl"},
+    }
+    t_lublin = {"subject": "x", "requester_id": 1, "custom_fields": {}}
+    t_edu = {"subject": "x", "requester_id": 2, "custom_fields": {}}
+    # 'up.lublin.pl' łapie tylko swoją domenę, nie up.edu.pl
+    assert fd._matches(t_lublin, fd._tokens("up.lublin.pl"), contacts)
+    assert not fd._matches(t_edu, fd._tokens("up.lublin.pl"), contacts)
+    # a 'up.edu.pl' łapie swoją
+    assert fd._matches(t_edu, fd._tokens("up.edu.pl"), contacts)
+
+
 def test_or_groups_splits_alternatives_and_ands_within():
     # '|' rozdziela grupy (OR), spacja/myślnik łączy tokeny w grupie (AND)
     assert fd._or_groups("ATOM|APOZ") == [["atom"], ["apoz"]]

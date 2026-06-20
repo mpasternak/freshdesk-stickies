@@ -305,7 +305,12 @@ def _matches(t: dict, tokens: list[str], contacts: dict) -> bool:
 def _tokens(project: str | None) -> list[str]:
     if not project:
         return []
-    return [tok.lower() for tok in re.split(r"[^0-9a-zA-ZąćęłńóśżźĄĆĘŁŃÓŚŻŹ]+", project) if tok]
+    # Kropka ZOSTAJE w tokenie, by domeny dopasowywać w całości: 'up.lublin.pl'
+    # to jeden token (substring), a nie luźne 'up'+'lublin'+'pl' — te łapały za
+    # dużo (np. 'lublin' z dowolnego miejsca zgłoszenia). Rozdzielamy na spacji,
+    # myślniku, '@', '|' itp. Kropki wiodące/końcowe obcinamy.
+    raw = re.split(r"[^0-9a-zA-Z.ąćęłńóśżźĄĆĘŁŃÓŚŻŹ]+", project)
+    return [t for t in (tok.lower().strip(".") for tok in raw) if t]
 
 
 def _or_groups(project: str | None) -> list[list[str]]:
@@ -337,15 +342,18 @@ def build(
       spacją łączą się przez AND, a '|' to alternatywa (OR): 'ATOM|APOZ' =
       atom LUB apoz, 'BILLING ACME' = billing I acme. None = wszystko.
     - exclude: lista filtrów wyłączających — zgłoszenie odpada, gdy pasuje do
-      KTÓREGOKOLWIEK z nich. Tak robimy karteczkę „pozostałe" (NIE pasujące do
-      żadnego z wymienionych projektów).
+      KTÓREGOKOLWIEK z nich. Każdy wpis ma tę samą składnię co project (AND po
+      spacji, OR po '|'), więc ten sam zapis „BPP-set" działa raz jako filtr
+      włączający karteczki BPP, raz jako wykluczenie w „pozostałe".
     - recent: zamiast scoringu sortuj otwarte malejąco po dacie zgłoszenia
       (najnowsze u góry) — karteczka „ostatnio zgłoszone".
     - limit: przytnij listę otwartych do N pozycji.
     """
     now = datetime.now(timezone.utc)
     include_groups = _or_groups(project)
-    exclude_lists = [toks for toks in (_tokens(e) for e in (exclude or [])) if toks]
+    # każdy wpis exclude też wspiera alternatywę '|' — dzięki temu ten sam zapis
+    # „BPP-set" działa i jako --query (włącz), i jako --exclude (wyłącz)
+    exclude_groups = [g for e in (exclude or []) for g in _or_groups(e)]
 
     raw_open = _search_all(2)
     raw_pending = _search_all(3)
@@ -357,8 +365,8 @@ def build(
         # filtr włączający: zgłoszenie musi pasować do CO NAJMNIEJ JEDNEJ grupy OR
         if include_groups and not any(_matches(t, toks, contacts) for toks in include_groups):
             return False
-        # filtr wykluczający: odpada, gdy pasuje do KTÓREGOKOLWIEK z wykluczeń
-        return not any(_matches(t, toks, contacts) for toks in exclude_lists)
+        # filtr wykluczający: odpada, gdy pasuje do KTÓREJKOLWIEK grupy wykluczeń
+        return not any(_matches(t, g, contacts) for g in exclude_groups)
 
     open_items = []
     for t in raw_open:
@@ -411,7 +419,7 @@ def build(
     pending_items.sort(key=lambda r: (order[r["bucket"]], -r["silence_days"]))
 
     return {
-        "project": project or ("pozostałe" if exclude_lists else "wszystko"),
+        "project": project or ("pozostałe" if exclude_groups else "wszystko"),
         "generated_at": now.isoformat(timespec="seconds"),
         "grouped": not recent,  # otwarte w sekcjach pilności (recent = płaska lista wg daty)
         "open": open_items,
