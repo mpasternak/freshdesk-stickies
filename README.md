@@ -1,5 +1,8 @@
 # freshdesk-stickies
 
+[![CI](https://github.com/mpasternak/freshdesk-stickies/actions/workflows/ci.yml/badge.svg)](https://github.com/mpasternak/freshdesk-stickies/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Desktop **sticky notes** that show your most urgent Freshdesk tickets — **one note
 per project or person** — and refresh themselves. Built for [Übersicht](https://tracesof.net/uebersicht/)
 on macOS, powered by a tiny dependency-free Python script that talks straight to
