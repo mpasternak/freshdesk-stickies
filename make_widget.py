@@ -244,7 +244,7 @@ export const render = (state, dispatch) => {
   );
 
   const countsLine = c
-    ? <span>🔴 {c.open} open ({c.open_sla} po SLA) · 🐌 {c.pending} klient</span>
+    ? <span>🔴 {c.open} open ({c.open_sla} po SLA){c.pending > 0 ? ` · 🐌 ${c.pending} klient` : ""}</span>
     : <span>{error ? "⚠️ błąd" : "—"}</span>;
 
   // Zwinięta: tylko pasek nagłówka (tytuł + liczniki + przyciski).

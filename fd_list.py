@@ -21,9 +21,12 @@ def _truncate(s: str, n: int = 58) -> str:
 
 def _text(data: dict) -> str:
     c = data["counts"]
+    head = f"🔴 {c['open']} open ({c['open_sla']} po SLA)"
+    if c["pending"]:
+        head += f" · 🐌 {c['pending']} klient milczy"
     lines = [
         f"Freshdesk — [{data['project']}]   {data['generated_at']}",
-        f"🔴 {c['open']} open ({c['open_sla']} po SLA) · 🐌 {c['pending']} klient milczy",
+        head,
         "",
     ]
     for i, r in enumerate(data["open"], 1):
