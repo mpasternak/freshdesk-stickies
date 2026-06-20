@@ -1,7 +1,24 @@
 # Oczekujące: czas odpowiedzi klienta + porządek z zegarkiem/SLA
 
 Data: 2026-06-20
-Status: do recenzji
+Status: częściowo zrewidowane (patrz „Aktualizacja")
+
+> ## Aktualizacja 2026-06-20 (po wdrożeniu)
+>
+> Gałąź **„ja odpisałem ostatni" (piłka u klienta)** wróciła do **stopniowanych
+> kubełków** zamiast binarnego ukrycia ≤14 dni / `🐌` >14 dni:
+>
+> - cisza klienta > **7 dni** → `🔔` (przypominajka),
+> - cisza klienta > **14 dni** → `🗑` (kandydat do zamknięcia),
+> - ≤ 7 dni → świeże: w CLI z `·`, w widgetcie **niepokazywane**.
+>
+> Cisza nadal liczona z `stats` (`pending_since` → fallback
+> `agent_responded_at` → `updated_at`) — `pending_bucket()` wrócił, ale jako
+> funkcja **ciszy klienta** (nie wieku `updated_at`). Gałąź **„klient odpisał
+> ostatni" (piłka u mnie) → doklejana do otwartych (`💬`)** zostaje bez zmian.
+> Powód: jeden płaski `🐌` gubił niuans pilności, a oczekujące „z moim
+> komentarzem" znikały całkiem (ukryte ≤14 dni). Sekcje 2–3 niżej opisują
+> *pierwotny* projekt.
 
 ## 1. Cel
 

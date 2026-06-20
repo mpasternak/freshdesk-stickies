@@ -23,7 +23,7 @@ def _text(data: dict) -> str:
     c = data["counts"]
     head = f"🔴 {c['open']} open ({c['open_sla']} po SLA)"
     if c["pending"]:
-        head += f" · 🐌 {c['pending']} klient milczy"
+        head += f" · 🟡 {c['pending']} pending ({c['remind']} 🔔, {c['close']} 🗑)"
     lines = [
         f"Freshdesk — [{data['project']}]   {data['generated_at']}",
         head,
@@ -41,9 +41,10 @@ def _text(data: dict) -> str:
         lines.append(f"  #{r['id']:<4} {flags:14} {mark}{_truncate(r['subject'])}  ·{r['age_days']:.0f}d")
     if data["pending"]:
         lines.append("")
+        icon = {"close": "🗑", "remind": "🔔", "fresh": "·"}
         for r in data["pending"]:
             d = r.get("silence_days") or 0
-            lines.append(f"  🐌 #{r['id']} {_truncate(r['subject'])}  · klient {d:.0f}d")
+            lines.append(f"  {icon[r['bucket']]} #{r['id']} {_truncate(r['subject'])}  · klient {d:.0f}d")
     return "\n".join(lines)
 
 

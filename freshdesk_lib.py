@@ -37,7 +37,8 @@ W_AGE_PER_DAY = 1
 W_AGE_CAP = 30
 
 OLD_DAYS = 14  # wiek otwartego zgłoszenia → flaga 🕸 "stare"
-CLIENT_SILENCE_DAYS = 14  # oczekujące: cisza klienta > tylu dni → 🐌 "klient Nd"
+REMIND_DAYS = 7  # oczekujące: cisza klienta > tylu dni → 🔔 przypominajka
+CLOSE_DAYS = 14  # oczekujące: cisza klienta > tylu dni → 🗑 kandydat do zamknięcia
 
 _CACHE_DIR = Path.home() / ".cache" / "freshdesk"
 _CONTACT_CACHE = _CACHE_DIR / "contacts.json"
@@ -266,6 +267,20 @@ def client_silence_days(stats: dict, t: dict, now: datetime) -> float:
     return _age_days(since, now)
 
 
+def pending_bucket(silence_days: float) -> str:
+    """Kubełek oczekującego wg długości ciszy klienta (dni).
+
+    > CLOSE_DAYS  → 🗑 kandydat do zamknięcia,
+    > REMIND_DAYS → 🔔 przypominajka należna,
+    reszta        → świeże (czeka, jeszcze nic nie wymaga akcji).
+    """
+    if silence_days > CLOSE_DAYS:
+        return "close"
+    if silence_days > REMIND_DAYS:
+        return "remind"
+    return "fresh"
+
+
 # ── Filtr per projekt/osoba ──────────────────────────────────────────────────
 
 
@@ -335,9 +350,9 @@ def build(
         open_items.append(_row(t, contacts, now, score=score, flags=flags))
 
     # Oczekujące: dla każdego dociągamy „stats" (kto odpisał ostatni) + żywy status.
-    #  - klient odpisał ostatni (piłka u mnie)      → doklej do otwartych, scoring jak otwarte,
-    #  - ja odpisałem, klient milczy ≤ 14 dni       → ukryte (nic nie wymaga akcji),
-    #  - ja odpisałem, klient milczy > 14 dni       → sekcja oczekujących z 🐌.
+    #  - klient odpisał ostatni (piłka u mnie) → doklej do otwartych, scoring jak otwarte,
+    #  - ja odpisałem (piłka u klienta)        → sekcja oczekujących; kubełek wg ciszy
+    #    klienta: > 7 dni 🔔 przypomnij, > 14 dni 🗑 zamknij, świeże czekają.
     pending_items = []
     stats_cache = _load_stats_cache()
     stats_dirty = False
@@ -359,8 +374,9 @@ def build(
             open_items.append(_row(full, contacts, now, score=score, flags=flags, from_pending=True))
         else:
             silence = client_silence_days(stats, full, now)
-            if silence > CLIENT_SILENCE_DAYS:
-                pending_items.append(_row(full, contacts, now, silence_days=round(silence, 1)))
+            pending_items.append(
+                _row(full, contacts, now, bucket=pending_bucket(silence), silence_days=round(silence, 1))
+            )
     if stats_dirty:
         _save_stats_cache(stats_cache)
 
@@ -372,8 +388,9 @@ def build(
     if limit:
         open_items = open_items[:limit]
 
-    # najdłużej milczący klient u góry
-    pending_items.sort(key=lambda r: r["silence_days"], reverse=True)
+    # najpierw do zamknięcia, potem do przypomnienia, potem świeże; w grupie dłuższa cisza wyżej
+    order = {"close": 0, "remind": 1, "fresh": 2}
+    pending_items.sort(key=lambda r: (order[r["bucket"]], -r["silence_days"]))
 
     return {
         "project": project or ("pozostałe" if exclude_lists else "wszystko"),
@@ -385,13 +402,15 @@ def build(
             "open": len(open_items),
             "open_sla": sum(1 for r in open_items if "⏰SLA" in r["flags"]),
             "pending": len(pending_items),
+            "remind": sum(1 for r in pending_items if r["bucket"] == "remind"),
+            "close": sum(1 for r in pending_items if r["bucket"] == "close"),
         },
     }
 
 
-def _row(t, contacts, now, *, score=0, flags=None, from_pending=False, silence_days=None) -> dict:
+def _row(t, contacts, now, *, score=0, flags=None, from_pending=False, bucket=None, silence_days=None) -> dict:
     c = contacts.get(str(t.get("requester_id")), {})
-    ts = t.get("updated_at") if silence_days is not None else t.get("created_at")
+    ts = t.get("updated_at") if bucket else t.get("created_at")
     return {
         "id": t["id"],
         "url": panel_url(t["id"]),
@@ -400,8 +419,9 @@ def _row(t, contacts, now, *, score=0, flags=None, from_pending=False, silence_d
         "score": score,
         "flags": flags or [],
         "from_pending": from_pending,  # „klient odpisał" doklejone do otwartych
-        "silence_days": silence_days,  # tylko oczekujące >14 dni (🐌 klient Nd)
-        "tier": None if silence_days is not None else urgency_tier(flags or []),
+        "bucket": bucket,  # oczekujące: fresh / remind 🔔 / close 🗑 (wg ciszy klienta)
+        "silence_days": silence_days,  # ile dni klient milczy (do etykiety „klient Nd")
+        "tier": None if bucket else urgency_tier(flags or []),
         "requester": c.get("name") or c.get("email") or "",
         "age_days": round(_age_days(ts, now), 1),
         "created_at": t.get("created_at") or "",

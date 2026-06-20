@@ -271,7 +271,7 @@ export const render = (state, dispatch) => {
   );
 
   const countsLine = c
-    ? <span>🔴 {c.open} open ({c.open_sla} po SLA){c.pending > 0 ? ` · 🐌 ${c.pending} klient` : ""}</span>
+    ? <span>🔴 {c.open} open ({c.open_sla} po SLA){c.pending > 0 ? ` · 🟡 ${c.pending} pending` : ""}</span>
     : <span>{error ? "⚠️ błąd" : "—"}</span>;
 
   // Zwinięta: tylko pasek nagłówka (tytuł + liczniki + przyciski).
@@ -309,11 +309,11 @@ export const render = (state, dispatch) => {
           <div style={sub}>brak otwartych 🎉</div>
         )}
         {!error && d && d.open && renderOpen(d.open, d.grouped)}
-        {!error && d && d.pending && d.pending.length > 0 && (
+        {!error && d && d.pending && d.pending.filter((r) => r.bucket !== "fresh").length > 0 && (
           <div style={pend}>
-            {d.pending.map((r) => (
+            {d.pending.filter((r) => r.bucket !== "fresh").map((r) => (
               <a style={row} href={r.url} title={r.subject} key={r.id}>
-                <span style={idc}>🐌 #{r.id}</span>{trunc(r.subject, 30)}{" "}
+                <span style={idc}>{r.bucket === "close" ? "🗑" : "🔔"} #{r.id}</span>{trunc(r.subject, 30)}{" "}
                 <span style={{ opacity: 0.55 }}>klient {Math.round(r.silence_days || 0)}d</span>
               </a>
             ))}

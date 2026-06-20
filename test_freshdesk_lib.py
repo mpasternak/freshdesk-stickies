@@ -112,3 +112,15 @@ def test_client_silence_days_fallbacks():
     # brak stats → updated_at zgłoszenia
     t = {"updated_at": _iso(NOW - timedelta(days=9))}
     assert round(fd.client_silence_days({}, t, NOW)) == 9
+
+
+def test_pending_bucket_thresholds():
+    # świeże: cisza ≤ 7 dni → nic nie wymaga akcji
+    assert fd.pending_bucket(0) == "fresh"
+    assert fd.pending_bucket(fd.REMIND_DAYS) == "fresh"  # dokładnie na progu = jeszcze świeże
+    # > 7 dni → 🔔 przypominajka
+    assert fd.pending_bucket(fd.REMIND_DAYS + 0.1) == "remind"
+    assert fd.pending_bucket(fd.CLOSE_DAYS) == "remind"  # dokładnie na progu zamknięcia = wciąż 🔔
+    # > 14 dni → 🗑 kandydat do zamknięcia
+    assert fd.pending_bucket(fd.CLOSE_DAYS + 0.1) == "close"
+    assert fd.pending_bucket(99) == "close"
