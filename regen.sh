@@ -14,7 +14,10 @@ PY="${PYTHON:-python3}"
 # i do wykluczenia w „Pozostałe". '|' = alternatywa (OR), spacja = AND w grupie.
 # Domeny dopasowujemy w całości (kropka zostaje w tokenie). up.edu.pl ≡ up.lublin.pl
 # (ta sama uczelnia). 'umlub' łapie umlub.pl oraz umlub.edu.pl.
-BPP_FILTER='BPP|Anna Czapczyńska|Anna Starek|Anna Wołodko|umlub|up.edu.pl|up.lublin.pl'
+# 'PBN' to pojęcie z systemu BPP → zgłoszenia z PBN idą do BPP (dotyczy zwł.
+# Bihałowicza z @apoz.edu.pl: bez tego jego PBN-y wpadałyby do ATOM-APOZ przez
+# 'apoz' z maila). Jego zgłoszenia ATOM nie mają bpp/pbn → zostają w ATOM-APOZ.
+BPP_FILTER='BPP|PBN|Anna Czapczyńska|Anna Starek|Anna Wołodko|umlub|up.edu.pl|up.lublin.pl'
 
 "$PY" make_widget.py "BPP"       --query "$BPP_FILTER" --top 40 --left 40
 "$PY" make_widget.py "ATOM-APOZ" --query "ATOM|APOZ" --exclude "$BPP_FILTER" --top 40 --left 430 --accent "#e07a3f"
