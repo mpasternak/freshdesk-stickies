@@ -90,11 +90,26 @@ name/email (case-insensitive).
    ```
    You should see a scored list. If not, the error tells you what's missing.
 
-4. **Generate your notes** (one per project), positioning them on screen:
+4. **Generate your notes**, positioning them on screen. The first argument is
+   the note's **name** (its title, filename, and saved position key); by default
+   it's also the filter, but `--query` can override that:
    ```sh
+   # plain project note (name == filter)
    python3 make_widget.py "Webapp"       --top 40 --left 40
    python3 make_widget.py "BILLING-ACME" --top 40 --left 430 --accent "#e07a3f"
+
+   # name different from the filter
+   python3 make_widget.py "Lublin" --query "up.lublin" --left 820
+
+   # "Other" — tickets matching NONE of the listed filters
+   python3 make_widget.py "Other" --exclude "Webapp" "BILLING-ACME" "Lublin" --top 360
+
+   # "Recently reported" — newest first, ignoring the priority score
+   python3 make_widget.py "Recent" --recent --left 1210
    ```
+   Once installed, **drag a note with the mouse** to reposition it — the spot is
+   remembered (localStorage), so refreshes and reboots keep it in place. Clicking
+   a ticket row still opens it in the browser.
 
 5. **Install the widgets** into Übersicht:
    ```sh

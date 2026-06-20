@@ -2,13 +2,15 @@
 """CLI dla widgetu Übersicht i do testów w terminalu.
 
 Użycie:
-    python3 fd_list.py "Webapp"          # ładny wydruk tekstowy (test)
-    python3 fd_list.py "Webapp" --json   # JSON dla widgetu Übersicht
-    python3 fd_list.py                   # bez filtra = wszystko
+    python3 fd_list.py "Webapp"                       # filtr (tekst, test)
+    python3 fd_list.py "Webapp" --json                # JSON dla widgetu
+    python3 fd_list.py                                 # bez filtra = wszystko
+    python3 fd_list.py --exclude "Webapp" "ACME"      # 'pozostałe' (nie pasujące)
+    python3 fd_list.py --recent                        # 'ostatnio zgłoszone'
 """
 
+import argparse
 import json
-import sys
 
 import freshdesk_lib as fd
 
@@ -37,12 +39,23 @@ def _text(data: dict) -> str:
 
 
 def main() -> None:
-    args = [a for a in sys.argv[1:] if a != "--json"]
-    as_json = "--json" in sys.argv[1:]
-    project = args[0] if args else None
+    ap = argparse.ArgumentParser(description="Lista zgłoszeń z Freshdeska (scoring + filtr).")
+    ap.add_argument("project", nargs="?", default=None, help="filtr włączający, np. 'BPP' / 'APOZ-ATOM'")
+    ap.add_argument(
+        "--exclude",
+        nargs="*",
+        metavar="FILTR",
+        help="pokaż tylko zgłoszenia NIE pasujące do żadnego z tych filtrów ('pozostałe')",
+    )
+    ap.add_argument("--recent", action="store_true", help="sortuj wg daty zgłoszenia (najnowsze u góry)")
+    ap.add_argument("--limit", type=int, default=None, help="przytnij listę otwartych do N")
+    ap.add_argument("--json", action="store_true", help="wyjście JSON (dla widgetu Übersicht)")
+    a = ap.parse_args()
 
-    data = fd.build(project)
-    if as_json:
+    limit = a.limit if a.limit is not None else (12 if a.recent else None)
+    data = fd.build(project=a.project, exclude=a.exclude, recent=a.recent, limit=limit)
+
+    if a.json:
         print(json.dumps(data, ensure_ascii=False))
     else:
         print(_text(data))

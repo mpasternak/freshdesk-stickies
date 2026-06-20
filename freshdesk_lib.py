@@ -233,10 +233,25 @@ def _tokens(project: str | None) -> list[str]:
 # ── Publiczne API ────────────────────────────────────────────────────────────
 
 
-def build(project: str | None) -> dict:
-    """Zbuduj listę dla projektu/osoby (albo całość, gdy project=None)."""
+def build(
+    project: str | None = None,
+    exclude: list[str] | None = None,
+    recent: bool = False,
+    limit: int | None = None,
+) -> dict:
+    """Zbuduj listę zgłoszeń dla karteczki.
+
+    - project: filtr włączający (tokeny AND po temacie+URL+zgłaszającym). None = wszystko.
+    - exclude: lista filtrów wyłączających — zgłoszenie odpada, gdy pasuje do
+      KTÓREGOKOLWIEK z nich. Tak robimy karteczkę „pozostałe" (NIE pasujące do
+      żadnego z wymienionych projektów).
+    - recent: zamiast scoringu sortuj otwarte malejąco po dacie zgłoszenia
+      (najnowsze u góry) — karteczka „ostatnio zgłoszone".
+    - limit: przytnij listę otwartych do N pozycji.
+    """
     now = datetime.now(timezone.utc)
     tokens = _tokens(project)
+    exclude_lists = [toks for toks in (_tokens(e) for e in (exclude or [])) if toks]
 
     raw_open = _search_all(2)
     raw_pending = _search_all(3)
@@ -244,17 +259,27 @@ def build(project: str | None) -> dict:
     req_ids = {t["requester_id"] for t in raw_open + raw_pending if t.get("requester_id")}
     contacts = _resolve_contacts(req_ids)
 
+    def keep(t: dict) -> bool:
+        if not _matches(t, tokens, contacts):
+            return False
+        return not any(_matches(t, toks, contacts) for toks in exclude_lists)
+
     open_items = []
     for t in raw_open:
-        if not _matches(t, tokens, contacts):
+        if not keep(t):
             continue
         score, flags = score_open(t, now)
         open_items.append(_row(t, contacts, now, score=score, flags=flags))
-    open_items.sort(key=lambda r: (-r["score"], r["created_at"]))
+    if recent:
+        open_items.sort(key=lambda r: r["created_at"], reverse=True)
+    else:
+        open_items.sort(key=lambda r: (-r["score"], r["created_at"]))
+    if limit:
+        open_items = open_items[:limit]
 
     pending_items = []
     for t in raw_pending:
-        if not _matches(t, tokens, contacts):
+        if not keep(t):
             continue
         bucket = pending_bucket(t, now)
         pending_items.append(_row(t, contacts, now, bucket=bucket))
@@ -263,7 +288,7 @@ def build(project: str | None) -> dict:
     pending_items.sort(key=lambda r: (order[r["bucket"]], r["updated_at"]))
 
     return {
-        "project": project or "wszystko",
+        "project": project or ("pozostałe" if exclude_lists else "wszystko"),
         "generated_at": now.isoformat(timespec="seconds"),
         "open": open_items,
         "pending": pending_items,

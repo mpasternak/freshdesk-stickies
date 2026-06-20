@@ -1,9 +1,22 @@
 #!/usr/bin/env python3
 """Generator samodzielnych widgetów Übersicht (jeden plik = jedna karteczka).
 
+Pierwszy argument to NAZWA karteczki (tytuł + nazwa pliku + klucz pozycji).
+Domyślnie jest też filtrem; filtr można nadpisać przez --query.
+
 Użycie:
-    python3 make_widget.py "Webapp"           --top 40  --left 40
-    python3 make_widget.py "BILLING-ACME"     --top 40  --left 430 --accent "#e07a3f"
+    # zwykła karteczka projektu (nazwa = filtr):
+    python3 make_widget.py "Webapp"        --top 40  --left 40
+    python3 make_widget.py "BILLING-ACME"  --top 40  --left 430 --accent "#e07a3f"
+
+    # nazwa inna niż filtr:
+    python3 make_widget.py "Lublin" --query "up.lublin" --left 820
+
+    # 'pozostałe' — zgłoszenia NIE pasujące do żadnego z podanych filtrów:
+    python3 make_widget.py "Pozostałe" --exclude "Webapp" "BILLING-ACME" --top 360
+
+    # 'ostatnio zgłoszone' — wg daty zgłoszenia, najnowsze u góry:
+    python3 make_widget.py "Ostatnio" --recent --left 1210
 
 Powstaje plik widgets/freshdesk-<slug>.jsx. Skopiuj go (albo cały katalog
 widgets/) do katalogu widgetów Übersicht — patrz README.
@@ -19,12 +32,11 @@ PYTHON = sys.executable
 PROJECT_DIR = str(Path(__file__).resolve().parent)
 
 TEMPLATE = r"""// AUTO-GENEROWANE przez make_widget.py — edytuj generator, nie ten plik.
-// Karteczka Freshdesk dla projektu: __PROJECT__
+// Karteczka Freshdesk: __LABEL__
 
 export const refreshFrequency = 300000; // 5 min
 
-export const command =
-  `cd __PROJECT_DIR__ && __PYTHON__ fd_list.py "__PROJECT__" --json`;
+export const command = `__COMMAND__`;
 
 // Wrapper trzymamy w 0,0 — realną pozycję i wygląd ustawiamy na korzeniu
 // (position: fixed), dzięki czemu karteczkę można przeciągać myszą.
@@ -100,7 +112,7 @@ export const render = ({ output, error }) => {
     return (
       <div style={rootStyle} ref={initDrag}>
         <div style={hdr}>
-          <div style={title}>__PROJECT__</div>
+          <div style={title}>__LABEL__</div>
           <div style={sub}>Brak danych — sprawdź klucz API (~/.config/freshdesk/key).</div>
         </div>
       </div>
@@ -110,7 +122,7 @@ export const render = ({ output, error }) => {
   return (
     <div style={rootStyle} ref={initDrag}>
       <div style={hdr}>
-        <div style={title}>__PROJECT__</div>
+        <div style={title}>__LABEL__</div>
         <div style={sub}>
           🔴 {c.open} open ({c.open_sla} po SLA) · 🟡 {c.pending} pending
         </div>
@@ -145,24 +157,50 @@ def slug(project: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", project.lower()).strip("-")
 
 
+def build_command(a) -> str:
+    """Złóż komendę fd_list dla widgetu z opcji generatora."""
+    fd_args: list[str] = []
+    if a.recent:
+        fd_args.append("--recent")
+    elif a.exclude:
+        fd_args.append("--exclude")
+        fd_args += [f'"{e}"' for e in a.exclude]
+    else:
+        query = a.query if a.query is not None else a.label
+        if query:
+            fd_args.append(f'"{query}"')
+    if a.limit is not None:
+        fd_args += ["--limit", str(a.limit)]
+    fd_args.append("--json")
+    return f"cd {PROJECT_DIR} && {PYTHON} fd_list.py " + " ".join(fd_args)
+
+
 def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("project")
+    ap = argparse.ArgumentParser(description="Generator karteczek Übersicht dla Freshdeska.")
+    ap.add_argument("label", help="nazwa karteczki: tytuł + nazwa pliku + klucz pozycji")
+    ap.add_argument("--query", default=None, help="filtr fd_list (domyślnie = label), np. 'APOZ-ATOM'")
+    ap.add_argument(
+        "--exclude",
+        nargs="*",
+        metavar="FILTR",
+        help="karteczka 'pozostałe': pokaż NIE pasujące do żadnego z tych filtrów",
+    )
+    ap.add_argument("--recent", action="store_true", help="karteczka 'ostatnio zgłoszone' (wg daty)")
+    ap.add_argument("--limit", type=int, default=None, help="przytnij listę otwartych do N")
     ap.add_argument("--top", type=int, default=40)
     ap.add_argument("--left", type=int, default=40)
     ap.add_argument("--accent", default="#3f7ae0")
     a = ap.parse_args()
 
     content = (
-        TEMPLATE.replace("__PROJECT_DIR__", PROJECT_DIR)
-        .replace("__PYTHON__", PYTHON)
-        .replace("__SLUG__", slug(a.project))
-        .replace("__PROJECT__", a.project)
+        TEMPLATE.replace("__COMMAND__", build_command(a))
+        .replace("__SLUG__", slug(a.label))
+        .replace("__LABEL__", a.label)
         .replace("__TOP__", str(a.top))
         .replace("__LEFT__", str(a.left))
         .replace("__ACCENT__", a.accent)
     )
-    out = Path(__file__).parent / "widgets" / f"freshdesk-{slug(a.project)}.jsx"
+    out = Path(__file__).parent / "widgets" / f"freshdesk-{slug(a.label)}.jsx"
     out.write_text(content, encoding="utf-8")
     print(f"zapisano {out}")
 
