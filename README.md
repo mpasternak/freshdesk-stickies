@@ -111,6 +111,22 @@ name/email (case-insensitive).
    remembered (localStorage), so refreshes and reboots keep it in place. Clicking
    a ticket row still opens it in the browser.
 
+   Each note's header has three controls (they don't trigger dragging):
+   - **⟳ refresh** — re-runs that note's query on demand (via Übersicht's `run`),
+     without waiting for the 5-minute cycle;
+   - **▾ / ▸ collapse** — shrinks the note to just its title + counts strip; click
+     again to expand;
+   - **✕ hide** — collapses the whole note to a small **📌 pin**; click the pin to
+     bring it back.
+
+   Drag the **bottom edge** of a note to set a fixed height (the ticket list then
+   scrolls inside); **double-click** that edge to go back to auto-height. Collapse,
+   hide and height are all remembered per note in localStorage, just like position.
+
+   If you change `make_widget.py` (the template), regenerate every note at once
+   with `./regen.sh` (it records each note's name, position and accent), then
+   re-run `./install-widgets.sh`.
+
 5. **Install the widgets** into Übersicht:
    ```sh
    ./install-widgets.sh
