@@ -1,0 +1,9 @@
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+# Specyfikacje/plany to proza — nowsze ruffy formatują też bloki kodu w Markdown.
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+# E (pycodestyle), F (pyflakes), I (isort), UP (pyupgrade), B (bugbear)
+select = ["E", "F", "I", "UP", "B"]
