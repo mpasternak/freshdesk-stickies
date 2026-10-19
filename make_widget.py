@@ -191,12 +191,36 @@ function refreshNow(dispatch) {
     .catch((err) => dispatch({ type: "FD/ERROR", error: String(err) }));
 }
 
+// --- wyciąganie na wierzch: wciśnięta karteczka idzie nad pozostałe -------
+// Wszystkie widgety Übersicht leżą na jednej stronie i dzielą localStorage, więc
+// wspólny licznik "sticky-z-top" daje każdej wciśniętej karteczce najwyższy
+// z-index. Własny zapisujemy pod Z_KEY — kolejność przeżywa odświeżenie.
+const Z_KEY = POS_KEY + ":z";
+function initRaise(el) {
+  let z = 0;
+  try { z = parseInt(localStorage.getItem(Z_KEY), 10) || 0; }
+  catch (e) { z = 0; } // brak localStorage — kolejność tylko do odświeżenia
+  if (z) el.style.zIndex = String(z);
+  el.addEventListener("mousedown", () => {
+    let top = 0;
+    try { top = parseInt(localStorage.getItem("sticky-z-top"), 10) || 0; }
+    catch (e) { top = 0; } // jw. — liczymy od zera
+    if (top && String(top) === el.style.zIndex) return; // już jest na wierzchu
+    el.style.zIndex = String(top + 1);
+    try {
+      localStorage.setItem("sticky-z-top", String(top + 1));
+      localStorage.setItem(Z_KEY, String(top + 1));
+    } catch (e) { /* brak miejsca — kolejność zostaje tylko do odświeżenia */ }
+  }, true); // capture: działa też przy kliknięciu w przycisk / link
+}
+
 // --- przeciąganie pozycji (+ wykrycie „tapnięcia" do przywrócenia pinezki) --
 function initDrag(el, onTap) {
   if (!el) return;
   if (onTap !== undefined) el.__fdTap = onTap; // tap = klik bez przeciągnięcia
   if (el.__fdInit) return;
   el.__fdInit = true;
+  initRaise(el);
   let pos;
   try { pos = JSON.parse(localStorage.getItem(POS_KEY)); } catch (e) { pos = null; }
   if (!pos) pos = { ...DEFAULT_POS };
